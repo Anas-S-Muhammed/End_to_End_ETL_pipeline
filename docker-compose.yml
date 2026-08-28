@@ -1,0 +1,67 @@
+version: "3.8"
+
+x-airflow-common: &airflow-common
+  image: apache/airflow:2.9.3
+  environment:
+    AIRFLOW__CORE__EXECUTOR: LocalExecutor
+    AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@airflow_meta_db/airflow
+    AIRFLOW__CORE__LOAD_EXAMPLES: "false"
+    AIRFLOW__WEBSERVER__EXPOSE_CONFIG: "true"
+    _PIP_ADDITIONAL_REQUIREMENTS: ${_PIP_ADDITIONAL_REQUIREMENTS:-requests psycopg2-binary python-dotenv}
+    WAREHOUSE_DB_HOST: warehouse_db
+    WAREHOUSE_DB_PORT: 5432
+    WAREHOUSE_DB_NAME: ${WAREHOUSE_DB_NAME}
+    WAREHOUSE_DB_USER: ${WAREHOUSE_DB_USER}
+    WAREHOUSE_DB_PASSWORD: ${WAREHOUSE_DB_PASSWORD}
+  volumes:
+    - ./dags:/opt/airflow/dags
+    - ./src:/opt/airflow/src
+    - ./sql:/opt/airflow/sql
+    - airflow_logs:/opt/airflow/logs
+  depends_on:
+    - airflow_meta_db
+    - warehouse_db
+
+services:
+  # --- Airflow's own internal metadata DB (task state, DAG runs, etc.) ---
+  airflow_meta_db:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: airflow
+      POSTGRES_PASSWORD: airflow
+      POSTGRES_DB: airflow
+    volumes:
+      - airflow_meta_data:/var/lib/postgresql/data
+
+  # --- The actual data warehouse this pipeline loads fuel price data into ---
+  warehouse_db:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: ${WAREHOUSE_DB_USER}
+      POSTGRES_PASSWORD: ${WAREHOUSE_DB_PASSWORD}
+      POSTGRES_DB: ${WAREHOUSE_DB_NAME}
+    ports:
+      - "5433:5432"   # exposed on host so you can connect with psql/DBeaver
+    volumes:
+      - warehouse_data:/var/lib/postgresql/data
+      - ./sql/schema.sql:/docker-entrypoint-initdb.d/schema.sql
+
+  airflow_init:
+    <<: *airflow-common
+    entrypoint: /bin/bash
+    command: -c "airflow db migrate && airflow users create --username admin --password admin --firstname Anas --lastname Muhammed --role Admin --email admin@example.com"
+
+  airflow_webserver:
+    <<: *airflow-common
+    command: webserver
+    ports:
+      - "8080:8080"
+
+  airflow_scheduler:
+    <<: *airflow-common
+    command: scheduler
+
+volumes:
+  airflow_meta_data:
+  warehouse_data:
+  airflow_logs:
