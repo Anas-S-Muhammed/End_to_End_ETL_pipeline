@@ -1,26 +1,28 @@
-version: "3.8"
-
 x-airflow-common: &airflow-common
-  image: apache/airflow:2.9.3
+  build: .
   environment:
     AIRFLOW__CORE__EXECUTOR: LocalExecutor
     AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@airflow_meta_db/airflow
     AIRFLOW__CORE__LOAD_EXAMPLES: "false"
-    AIRFLOW__WEBSERVER__EXPOSE_CONFIG: "true"
-    _PIP_ADDITIONAL_REQUIREMENTS: ${_PIP_ADDITIONAL_REQUIREMENTS:-requests psycopg2-binary python-dotenv}
+    AIRFLOW__WEBSERVER__EXPOSE_CONFIG: "false"
     WAREHOUSE_DB_HOST: warehouse_db
     WAREHOUSE_DB_PORT: 5432
     WAREHOUSE_DB_NAME: ${WAREHOUSE_DB_NAME}
     WAREHOUSE_DB_USER: ${WAREHOUSE_DB_USER}
     WAREHOUSE_DB_PASSWORD: ${WAREHOUSE_DB_PASSWORD}
+    AIRFLOW_ADMIN_USERNAME: ${AIRFLOW_ADMIN_USERNAME:-admin}
+    AIRFLOW_ADMIN_PASSWORD: ${AIRFLOW_ADMIN_PASSWORD:-admin}
+    AIRFLOW_ADMIN_EMAIL: ${AIRFLOW_ADMIN_EMAIL:-admin@example.com}
   volumes:
     - ./dags:/opt/airflow/dags
     - ./src:/opt/airflow/src
     - ./sql:/opt/airflow/sql
     - airflow_logs:/opt/airflow/logs
   depends_on:
-    - airflow_meta_db
-    - warehouse_db
+    airflow_meta_db:
+      condition: service_healthy
+    warehouse_db:
+      condition: service_healthy
 
 services:
   # --- Airflow's own internal metadata DB (task state, DAG runs, etc.) ---
@@ -32,6 +34,11 @@ services:
       POSTGRES_DB: airflow
     volumes:
       - airflow_meta_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U airflow -d airflow"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
 
   # --- The actual data warehouse this pipeline loads fuel price data into ---
   warehouse_db:
@@ -45,21 +52,38 @@ services:
     volumes:
       - warehouse_data:/var/lib/postgresql/data
       - ./sql/schema.sql:/docker-entrypoint-initdb.d/schema.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
 
   airflow_init:
     <<: *airflow-common
     entrypoint: /bin/bash
-    command: -c "airflow db migrate && airflow users create --username admin --password admin --firstname Anas --lastname Muhammed --role Admin --email admin@example.com"
+    command:
+      - -c
+      - >-
+        airflow db migrate &&
+        (airflow users create --username "$$AIRFLOW_ADMIN_USERNAME"
+        --password "$$AIRFLOW_ADMIN_PASSWORD" --firstname Anas --lastname Muhammed
+        --role Admin --email "$$AIRFLOW_ADMIN_EMAIL" || true)
 
   airflow_webserver:
     <<: *airflow-common
     command: webserver
     ports:
       - "8080:8080"
+    depends_on:
+      airflow_init:
+        condition: service_completed_successfully
 
   airflow_scheduler:
     <<: *airflow-common
     command: scheduler
+    depends_on:
+      airflow_init:
+        condition: service_completed_successfully
 
 volumes:
   airflow_meta_data:

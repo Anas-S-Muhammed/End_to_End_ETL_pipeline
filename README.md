@@ -37,9 +37,9 @@ tests/                        Unit tests for the transform layer
 
 ## Running it
 
-1. Copy `.env.example` to `.env` and set values.
+1. Copy `.env.example` to `.env` and set strong database and Airflow admin passwords.
 2. `docker compose up -d`
-3. Airflow UI at `localhost:8080` (default login: admin/admin, set in docker-compose).
+3. Airflow UI at `localhost:8080` (use the admin credentials in `.env`).
 4. Enable the `fuel_price_etl` DAG and trigger a run, or wait for the Friday 06:00 schedule.
 5. Connect to the warehouse directly on `localhost:5433` to inspect `analytics.fuel_prices`.
 

@@ -22,7 +22,7 @@ def _to_date(value: str) -> date:
 
 def clean_record(record: dict) -> dict:
     """Validates and reshapes a single raw fuel price record."""
-    if "date" not in record:
+    if not isinstance(record, dict) or not record.get("date"):
         raise ValueError(f"Record missing required 'date' field: {record}")
 
     return {
@@ -44,6 +44,6 @@ def clean_records(records: list[dict]) -> list[dict]:
     for raw in records:
         try:
             cleaned.append(clean_record(raw))
-        except ValueError as exc:
+        except (TypeError, ValueError) as exc:
             print(f"[transform] skipping bad record: {exc}")
     return cleaned

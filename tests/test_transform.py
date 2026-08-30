@@ -32,3 +32,8 @@ def test_clean_records_skips_bad_rows_without_failing_batch():
     ]
     result = clean_records(raw_batch)
     assert len(result) == 1
+
+
+def test_clean_records_skips_null_date_without_failing_batch():
+    result = clean_records([{"date": None}, {"date": "2026-01-02", "ron95": 2.05}])
+    assert len(result) == 1
