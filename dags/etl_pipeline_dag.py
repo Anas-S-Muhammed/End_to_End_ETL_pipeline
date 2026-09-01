@@ -15,11 +15,6 @@ from src.extract.api_client import fetch_fuel_prices, build_request_url
 from src.transform.cleaner import clean_records
 from src.load.loader import insert_raw_payload, upsert_fuel_prices, get_connection
 
-default_args = {
-    "owner": "anas",
-    "retries": 3,
-    "retry_delay": timedelta(minutes=5),
-}
 
 
 @dag(
